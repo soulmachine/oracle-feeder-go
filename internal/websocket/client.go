@@ -13,11 +13,37 @@ import (
 	"github.com/terra-money/oracle-feeder-go/internal/types"
 	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/binance"
 	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/huobi"
+	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/kucoin"
 )
 
 type websocketClient interface {
 	ConnectAndSubscribe(symbols []string) (*websocket.Conn, error)
 	ParseCandlestickMsg(msg []byte) (*types.CandlestickMsg, error)
+}
+
+func keepAlive(c *websocket.Conn, timeout time.Duration, setPong bool) {
+	lastResponse := time.Now()
+	if setPong {
+		c.SetPongHandler(func(msg string) error {
+			lastResponse = time.Now()
+			return nil
+		})
+	}
+
+	go func() {
+		for {
+			err := c.WriteMessage(websocket.PingMessage, []byte("keepalive"))
+			if err != nil {
+				log.Printf("Send ping error: %v", err)
+			}
+			time.Sleep(timeout / 2)
+			if setPong {
+				if time.Now().Sub(lastResponse) > timeout {
+					log.Printf("Ping don't get response from %s", c.LocalAddr())
+				}
+			}
+		}
+	}()
 }
 
 // SubscribeCandlestick subscribes to the candlestick channel.
@@ -28,7 +54,10 @@ func SubscribeCandlestick(exchange string, symbols []string, stopCh <-chan struc
 		client = binance.NewWebsocketClient()
 	case "huobi":
 		client = huobi.NewWebsocketClient()
+	case "kucoin":
+		client = kucoin.NewWebsocketClient()
 	default:
+		log.Printf("Exchange: %s not support\n", exchange)
 		client = nil
 	}
 
@@ -97,6 +126,11 @@ func SubscribeCandlestick(exchange string, symbols []string, stopCh <-chan struc
 			}
 		}
 	}()
+
+	switch strings.ToLower(exchange) {
+	case "kucoin":
+		keepAlive(conn, time.Duration(time.Duration.Seconds(18)), false)
+	}
 
 	return outCh, nil
 }
