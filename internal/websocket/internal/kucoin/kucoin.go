@@ -3,8 +3,12 @@ package kucoin
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/terra-money/oracle-feeder-go/internal/parser"
@@ -12,8 +16,6 @@ import (
 )
 
 const (
-	kucoinToken  string = "2neAiuYvAU61ZDXANAGAsiL4-iAExhsBXZxftpOeh_55i3Ysy2q2LEsEWU64mdzUOPusi34M_wGoSf7iNyEWJ9UT_GlW6MKFx3WVnfdBDgj012qY6cO5GNiYB9J6i9GjsxUuhPw3BlrzazF6ghq4LzNy_YO9hlfLIw7mB4U2GIQ=.uhKVxeTcmIJteGNV6cDMWw=="
-	websocketUrl string = "wss://ws-api-spot.kucoin.com/"
 	exchangeName string = "kucoin"
 )
 
@@ -24,29 +26,44 @@ func NewWebsocketClient() *WebsocketClient {
 }
 
 func (wc *WebsocketClient) ConnectAndSubscribe(symbols []string) (*websocket.Conn, error) {
-	wsUrl := fmt.Sprintf("%s?token=%s&connectId=terra-price-server", websocketUrl, kucoinToken)
+	wsToken, err := fetchWebsocketToken()
+	if err != nil {
+		return nil, err
+	}
+	wsUrl := fmt.Sprintf("%s?token=%s&connectId=terra-price-server", wsToken.endpoint, wsToken.token)
 	conn, _, err := websocket.DefaultDialer.Dial(wsUrl, nil)
 	if err != nil {
-		log.Println("#### line 31")
 		return nil, err
 	}
 
-	for _, symbol := range symbols {
-		command := generateCommand(symbol)
+	resp := make(map[string]interface{})
+	if err := conn.ReadJSON(&resp); err != nil {
+		return nil, err
+	}
+	if typ, ok := resp["type"].(string); ok && typ != "welcome" {
+		bytes, _ := json.Marshal(resp)
+		return nil, fmt.Errorf("%s", string(bytes))
+	}
+
+	// send ping per 30 seconds
+	// see https://docs.kucoin.com/#ping
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		for range ticker.C {
+			pingMsg := make(map[string]any)
+			pingMsg["type"] = "ping"
+			pingMsg["id"] = "terra-price-server"
+			err = conn.WriteJSON(pingMsg)
+			if err != nil {
+				log.Printf("%v", err)
+			}
+		}
+	}()
+
+	commands := generateCommands(symbols)
+	for _, command := range commands {
 		if err := conn.WriteJSON(&command); err != nil {
-			log.Println("#### line 38")
 			return nil, err
-		}
-
-		resp := make(map[string]interface{})
-		if err := conn.ReadJSON(&resp); err != nil {
-			return nil, err
-		}
-
-		if status, ok := resp["type"].(string); ok && status == "error" {
-			log.Println("#### line 46")
-			bytes, _ := json.Marshal(resp)
-			return nil, fmt.Errorf("%s", string(bytes))
 		}
 	}
 
@@ -69,56 +86,93 @@ type RawCandlestickMsg struct {
 
 // generateCommand generates the candlestick subscription command from specified symbols.
 //
-// API doc: https://docs.kucoin.com/#subscribe
+// API doc: https://docs.kucoin.com/#klines
+//
+// Kucoin allows to subscribe 100 symbols per time, otherwise you'll get an error
+// "exceed max subscription count limitation of 100 per time"
 //
 // For example:
-// {"sub":"market.btcusdt.kline.1min","id":"terra-price-server"}
-func generateCommand(symbol string) map[string]interface{} {
-	base, quote, err := parser.ParseSymbol("kucoin", symbol)
-	if err != nil {
-		log.Fatalf("symbol: %s invalid\n", symbol)
+// {"id":"terra-price-server","type":"subscribe","topic":"/market/candles:BTC-USDT_1min,BTC-USDT_1week","privateChannel":false,"response":true}
+func generateCommand(symbols []string) (map[string]interface{}, error) {
+	if len(symbols) > 100 {
+		return nil, fmt.Errorf("exceeds 100 symbols")
 	}
-	ex_symbol := fmt.Sprintf("%s-%s", base, quote)
-	topic := fmt.Sprintf("/market/candles:%s_1min", ex_symbol)
-	log.Printf("topic: %v\n", topic)
+	var topics []string
+	for _, symbol := range symbols {
+		topics = append(topics, fmt.Sprintf("%s_1min", symbol))
+	}
+	topic := fmt.Sprintf("/market/candles:%s", strings.Join(topics, ","))
 	return map[string]interface{}{
+		"id":             "terra-price-server",
 		"type":           "subscribe",
 		"topic":          topic,
-		"id":             "terra-price-server",
 		"response":       false,
 		"privateChannel": false,
-	}
+	}, nil
 }
 
-func convertSize(size string) float64 {
-	result, err := strconv.ParseFloat(size, 8)
-	if err != nil {
-		return -1
+func generateCommands(symbols []string) []map[string]interface{} {
+	var commands []map[string]interface{}
+	groupSize := 100
+	n := len(symbols)
+	for i := 0; i < n; i += groupSize {
+		j := i + groupSize
+		if j > n {
+			j = n
+		}
+		group := symbols[i:j]
+		command, err := generateCommand(group)
+		if err == nil {
+			commands = append(commands, command)
+		}
 	}
-	return result
+	return commands
 }
 
 func (wc *WebsocketClient) ParseCandlestickMsg(rawMsg []byte) (*types.CandlestickMsg, error) {
 	var msg RawCandlestickMsg
 	json.Unmarshal(rawMsg, &msg)
 
+	candles := msg.Data.Candles
+	if len(candles) != 7 {
+		return nil, fmt.Errorf("invalid candles %s", string(rawMsg))
+	}
+
 	symbol := msg.Data.Symbol
 	base, quote, err := parser.ParseSymbol(exchangeName, symbol)
 	if err != nil {
 		return nil, err
 	}
-	candles := msg.Data.Candles
-	if len(candles) != 7 {
-		return nil, fmt.Errorf("not candles %s", string(rawMsg))
+
+	open, err := strconv.ParseFloat(candles[1], 64)
+	if err != nil {
+		return nil, err
 	}
-	// startTime := convertSize(candles[0])
-	open, close, high, low := convertSize(candles[1]), convertSize(candles[2]), convertSize(candles[3]), convertSize(candles[4])
-	vol, quoteVol := convertSize(candles[5]), convertSize(candles[6])
+	close, err := strconv.ParseFloat(candles[2], 64)
+	if err != nil {
+		return nil, err
+	}
+	high, err := strconv.ParseFloat(candles[3], 64)
+	if err != nil {
+		return nil, err
+	}
+	low, err := strconv.ParseFloat(candles[4], 64)
+	if err != nil {
+		return nil, err
+	}
+	baseVolume, err := strconv.ParseFloat(candles[5], 64)
+	if err != nil {
+		return nil, err
+	}
+	quoteVolume, err := strconv.ParseFloat(candles[6], 64)
+	if err != nil {
+		return nil, err
+	}
 	vwap := 0.0
-	if vol == 0.0 || quoteVol == 0.0 {
+	if baseVolume == 0.0 || quoteVolume == 0.0 {
 		vwap = (open + close) / 2.0
 	} else {
-		vwap = quoteVol / vol
+		vwap = quoteVolume / baseVolume
 	}
 
 	return &types.CandlestickMsg{
@@ -131,7 +185,52 @@ func (wc *WebsocketClient) ParseCandlestickMsg(rawMsg []byte) (*types.Candlestic
 		High:      high,
 		Low:       low,
 		Close:     close,
-		Volume:    vol,
+		Volume:    baseVolume,
 		Vwap:      vwap,
+	}, nil
+}
+
+type websocketToken struct {
+	token    string
+	endpoint string
+}
+
+// see https://docs.kucoin.com/#apply-connect-token
+func fetchWebsocketToken() (*websocketToken, error) {
+	url := "https://openapi-v2.kucoin.com/api/v1/bullet-public"
+	client := &http.Client{Timeout: time.Second * 15}
+	request, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Add("Content-Type", "application/json")
+	resp, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonObj := make(map[string]any)
+	err = json.Unmarshal(body, &jsonObj)
+	if err != nil {
+		return nil, err
+	}
+
+	code := jsonObj["code"].(string)
+	if code != "200000" {
+		return nil, fmt.Errorf("%s", string(body))
+	}
+
+	data := jsonObj["data"].(map[string]any)
+	token := data["token"].(string)
+	instanceServers := data["instanceServers"].([]any)
+	endpoint := instanceServers[0].(map[string]any)["endpoint"].(string)
+	return &websocketToken{
+		token:    token,
+		endpoint: endpoint,
 	}, nil
 }
