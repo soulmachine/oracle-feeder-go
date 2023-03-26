@@ -38,15 +38,15 @@ func (wc *WebsocketClient) ConnectAndSubscribe(symbols []string) (*websocket.Con
 	if ok && event == "info" {
 		code, ok := resp["code"].(float64)
 		if ok {
-			return nil, fmt.Errorf("Connect error, code: %v %v\n", code, resp)
+			return nil, fmt.Errorf("connect error, code: %v %v", code, resp)
 		}
 		platform := resp["platform"].(map[string]interface{})
 		status := uint64(platform["status"].(float64))
 		if status != 1 {
-			return nil, fmt.Errorf("Connect error, code: %v\n", resp)
+			return nil, fmt.Errorf("connect error, code: %v", resp)
 		}
 	} else {
-		return nil, fmt.Errorf("Connect error: %v\n", resp)
+		return nil, fmt.Errorf("connect error: %v", resp)
 	}
 
 	for _, symbol := range symbols {
@@ -64,21 +64,20 @@ func (wc *WebsocketClient) HandleMsg(rawMsg []byte, conn *websocket.Conn) (*type
 		return parseCandlestickMsg(conn, rawMsg)
 	}
 	if strings.HasPrefix(string(rawMsg), "{") {
-		// log.Printf("### line 85 rawMsg: %v\n", string(rawMsg))
 		resp := make(map[string]interface{})
 		if err := json.Unmarshal(rawMsg, &resp); err != nil {
 			return nil, err
 		}
 		event, ok := resp["event"].(string)
 		if !ok {
-			return nil, fmt.Errorf("Invalid msg: %s", string(rawMsg))
+			return nil, fmt.Errorf("invalid msg: %s", string(rawMsg))
 		}
 		if event == "subscribed" {
 			channelId := uint64(resp["chanId"].(float64))
 			key := resp["key"].(string)
 			items := strings.Split(key, ":")
 			if len(items) < 3 {
-				return nil, fmt.Errorf("Invalid subscribed: %s", string(rawMsg))
+				return nil, fmt.Errorf("invalid subscribed: %s", string(rawMsg))
 			}
 			idToChannels[channelId] = items[2]
 			return nil, nil
@@ -119,15 +118,15 @@ func parseCandlestickMsg(conn *websocket.Conn, rawMsg []byte) (*types.Candlestic
 	var arr []interface{}
 	err := json.Unmarshal(rawMsg, &arr)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid msg %s", string(rawMsg))
+		return nil, fmt.Errorf("invalid msg %s", string(rawMsg))
 	}
 	if len(arr) != 2 {
-		return nil, fmt.Errorf("Invalid msg %s", string(rawMsg))
+		return nil, fmt.Errorf("invalid msg %s", string(rawMsg))
 	}
 	channelId := uint64(arr[0].(float64))
 	symbol, ok := idToChannels[channelId]
 	if !ok {
-		return nil, fmt.Errorf("No channel for %v", channelId)
+		return nil, fmt.Errorf("no channel for %v", channelId)
 	}
 	base, quote, err := parser.ParseSymbol(exchangeName, symbol)
 	if err != nil {
@@ -144,7 +143,7 @@ func parseCandlestickMsg(conn *websocket.Conn, rawMsg []byte) (*types.Candlestic
 			conn.WriteJSON(map[string]string{"event": "ping"})
 			return nil, nil
 		}
-		return nil, fmt.Errorf("Invalid msg: %v", string(rawMsg))
+		return nil, fmt.Errorf("invalid msg: %v", string(rawMsg))
 	}
 
 	// fmt.Printf("first item: %v\n", items[0])
@@ -153,7 +152,7 @@ func parseCandlestickMsg(conn *websocket.Conn, rawMsg []byte) (*types.Candlestic
 		candles = items
 	}
 	if len(candles) != 6 {
-		return nil, fmt.Errorf("Invalid candles %s", string(rawMsg))
+		return nil, fmt.Errorf("invalid candles %s", string(rawMsg))
 	}
 
 	timestamp := uint64(candles[0].(float64))

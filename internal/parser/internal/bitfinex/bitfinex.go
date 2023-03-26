@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// https://api-pub.bitfinex.com/v2/conf/pub:map:currency:sym
 var currencyMapping = map[string]string{
 	"AAA":     "TESTAAA",
 	"AIX":     "AI",
@@ -64,9 +65,7 @@ var currencyMapping = map[string]string{
 }
 
 func ParseSymbol(symbol string) (string, string, error) {
-	if strings.HasPrefix(symbol, "t") {
-		symbol = symbol[1:]
-	}
+	symbol = strings.TrimPrefix(symbol, "t")
 	var base string
 	var quote string
 	if strings.Contains(symbol, ":") {
