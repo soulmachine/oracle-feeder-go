@@ -16,9 +16,14 @@ func ParseSymbol(symbol string) (string, string, error) {
 
 func normalizeCurrency(currency string) string {
 	currency = strings.ToUpper(currency)
+	if len(currency) > 3 && (strings.HasPrefix(currency, "X") || strings.HasPrefix(currency, "Z")) {
+		currency = currency[1:]
+	}
 	switch currency {
 	case "XBT":
 		return "BTC"
+	case "XDG":
+		return "DOGE"
 	default:
 		return currency
 	}

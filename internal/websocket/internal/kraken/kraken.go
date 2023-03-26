@@ -29,11 +29,22 @@ func (wc *WebsocketClient) ConnectAndSubscribe(symbols []string) (*websocket.Con
 		return nil, err
 	}
 
-	commands := generateCommands(symbols)
-	for _, command := range commands {
-		if err := conn.WriteJSON(&command); err != nil {
-			return nil, err
-		}
+	resp := make(map[string]interface{})
+	if err := conn.ReadJSON(&resp); err != nil {
+		return nil, err
+	}
+	event, ok := resp["event"].(string)
+	if !ok || event != "systemStatus" {
+		return nil, fmt.Errorf("Connect error: %v\n", resp)
+	}
+	status, ok := resp["status"].(string)
+	if !ok || status != "online" {
+		return nil, fmt.Errorf("Connect error: %v\n", resp)
+	}
+
+	command, err := generateCommand(symbols)
+	if err := conn.WriteJSON(&command); err != nil {
+		return nil, err
 	}
 
 	return conn, nil
@@ -53,10 +64,17 @@ func (wc *WebsocketClient) HandleMsg(msg []byte, conn *websocket.Conn) (*types.C
 			return nil, fmt.Errorf("Invalid msg: %s", string(msg))
 		}
 		if event == "heartbeat" {
+			conn.WriteJSON(map[string]interface{}{"event": "ping", "reqid": 9527})
 			return nil, nil
 		}
-		if event == "systemStatus" || event == "subscriptionStatus" {
-			log.Printf("Received msg: %v\n", string(msg))
+		if event == "subscriptionStatus" {
+			status, ok := resp["status"].(string)
+			if !ok || status == "error" {
+				return nil, fmt.Errorf("Subscription error: %v\n", string(msg))
+			}
+			return nil, nil
+		}
+		if event == "pong" {
 			return nil, nil
 		}
 	}
@@ -74,9 +92,6 @@ func (wc *WebsocketClient) HandleMsg(msg []byte, conn *websocket.Conn) (*types.C
 // For example:
 // {"event": "subscribe","pair": ["XBT/EUR"],"subscription": {"interval": 5,"name": "ohlc"}}
 func generateCommand(symbols []string) (map[string]interface{}, error) {
-	if len(symbols) > 100 {
-		return nil, fmt.Errorf("exceeds 100 symbols")
-	}
 	var topics []string
 	for _, symbol := range symbols {
 		topics = append(topics, symbol)
@@ -91,24 +106,6 @@ func generateCommand(symbols []string) (map[string]interface{}, error) {
 		"pair":         topics,
 		"subscription": subscription,
 	}, nil
-}
-
-func generateCommands(symbols []string) []map[string]interface{} {
-	var commands []map[string]interface{}
-	groupSize := 100
-	n := len(symbols)
-	for i := 0; i < n; i += groupSize {
-		j := i + groupSize
-		if j > n {
-			j = n
-		}
-		group := symbols[i:j]
-		command, err := generateCommand(group)
-		if err == nil {
-			commands = append(commands, command)
-		}
-	}
-	return commands
 }
 
 // https://docs.kraken.com/websockets/#message-ohlc
