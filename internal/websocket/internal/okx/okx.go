@@ -29,10 +29,10 @@ func (wc *WebsocketClient) ConnectAndSubscribe(symbols []string) (*websocket.Con
 		return nil, err
 	}
 
-	// send ping per 30 seconds
+	// send ping per 15 seconds
 	// see https://www.okx.com/docs-v5/en/#websocket-api-connect
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(15 * time.Second)
 		for range ticker.C {
 			err = conn.WriteMessage(websocket.TextMessage, []byte("ping"))
 			if err != nil {
@@ -51,34 +51,28 @@ func (wc *WebsocketClient) ConnectAndSubscribe(symbols []string) (*websocket.Con
 
 func (wc *WebsocketClient) HandleMsg(msg []byte, conn *websocket.Conn) (*types.CandlestickMsg, error) {
 	if string(msg) == "pong" {
-		// log.Println("received pong")
 		return nil, nil
 	}
 	resp := make(map[string]interface{})
 	if err := json.Unmarshal(msg, &resp); err != nil {
 		return nil, err
 	}
-	_, argExist := resp["arg"].(map[string]interface{})
-	if !argExist {
-		return nil, fmt.Errorf("msg no arg: %s", string(msg))
-	}
-	_, dataExist := resp["data"].([]interface{})
-	if dataExist {
-		return parseCandlestickMsg(msg)
-	}
-	event, ok := resp["event"].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid msg: %s", string(msg))
-	}
-	if event == "error" {
-		return nil, fmt.Errorf("error msg: %s", string(msg))
-	}
-	if event == "subscribe" {
-		return nil, nil
+
+	if event, ok := resp["event"].(string); ok {
+		if event == "error" {
+			return nil, fmt.Errorf("%s", string(msg))
+		} else {
+			return nil, nil
+		}
 	}
 
-	log.Printf("unrecognized msg: %v\n", string(msg))
-	return nil, nil
+	_, argExist := resp["arg"].(map[string]interface{})
+	_, dataExist := resp["data"].([]interface{})
+	if argExist && dataExist {
+		return parseCandlestickMsg(msg)
+	} else {
+		return nil, nil
+	}
 }
 
 // generateCommand generates the candlestick subscription command from specified symbols.
@@ -86,7 +80,7 @@ func (wc *WebsocketClient) HandleMsg(msg []byte, conn *websocket.Conn) (*types.C
 // API doc: https://www.okx.com/docs-v5/en/#websocket-api-public-channel-candlesticks-channel
 //
 // For example:
-// {"op":"subscribe","args":[{"channel":"trades","instId":"BTC-USDT"},{"channel":"tickers","instId":"BTC-USDT"}]}
+// {"op":"subscribe","args":[{"channel":"candle1m","instId":"BTC-USDT"},{"channel":"candle1m","instId":"ETH-USDT"}]}
 func generateCommand(symbols []string) (map[string]interface{}, error) {
 	var args []map[string]string
 	for _, symbol := range symbols {
