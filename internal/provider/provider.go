@@ -26,6 +26,8 @@ func NewProvider(exchange string, config *configs.ProviderConfig, stopCh <-chan 
 		return coingecko.NewCoingeckoProvider(config, stopCh)
 	case "osmosis":
 		return osmosis.NewOsmosisProvider(config, stopCh)
+	case "exchangerate", "frankfurter", "fer":
+		return internal.NewFiatProvider(exchange, config.Symbols, config.Interval, config.Timeout, stopCh)
 	default:
 		return nil, fmt.Errorf("unknown exchange %s", exchange)
 	}
