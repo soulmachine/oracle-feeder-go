@@ -25,20 +25,20 @@ func NewCoingeckoClient() *CoingeckoClient {
 }
 
 func (p *CoingeckoClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
-	msg, err := fetchPrices(symbols)
+	msg, err := fetchPrices(symbols, timeout)
 	if err != nil {
 		return nil, err
 	}
 	return parseJSON(msg), nil
 }
 
-func fetchPrices(symbols []string) (map[string]map[string]float64, error) {
+func fetchPrices(symbols []string, timeout int) (map[string]map[string]float64, error) {
 	params := url.Values{}
 	params.Add("vs_currencies", "usd")
 	params.Add("precision", "18")
 	params.Add("ids", strings.Join(symbols, ","))
 	url := fmt.Sprintf("%s?%s", baseUrl, params.Encode())
-	client := &http.Client{Timeout: time.Second * 15}
+	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func fetchPrices(symbols []string) (map[string]map[string]float64, error) {
 
 func parseJSON(msg map[string]map[string]float64) map[string]internal_types.PriceBySymbol {
 	prices := make(map[string]internal_types.PriceBySymbol)
-	now := time.Now()
+	now := uint64(time.Now().UnixMilli())
 	for symbol, value := range msg {
 		base, quote, err := parser.ParseSymbol("coingecko", symbol)
 		if err == nil {
@@ -68,7 +68,7 @@ func parseJSON(msg map[string]map[string]float64) map[string]internal_types.Pric
 				Base:      base,
 				Quote:     quote,
 				Price:     value["usd"],
-				Timestamp: uint64(now.UnixMilli()),
+				Timestamp: now,
 			}
 		} else {
 			log.Printf("%v", err)

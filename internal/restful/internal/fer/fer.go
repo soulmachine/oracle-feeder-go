@@ -24,14 +24,14 @@ func NewFerClient() *FerClient {
 }
 
 func (p *FerClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
-	var queryCurrencies []string
+	var baseCurrencies []string
 	for _, symbol := range symbols {
 		items := strings.Split(symbol, "/")
-		queryCurrencies = append(queryCurrencies, items[0])
+		baseCurrencies = append(baseCurrencies, items[0])
 	}
-	url := fmt.Sprintf("%s?base=USD&to=%s", baseUrl, strings.Join(queryCurrencies, ","))
+	url := fmt.Sprintf("%s?base=USD&to=%s", baseUrl, strings.Join(baseCurrencies, ","))
 	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
-	fmt.Printf("url: %s\n", url)
+	log.Println(url)
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
@@ -44,20 +44,16 @@ func (p *FerClient) FetchAndParse(symbols []string, timeout int) (map[string]int
 	jsonObj := make(map[string]interface{})
 	err = json.Unmarshal(body, &jsonObj)
 	if err != nil {
-		log.Printf("parse response error: %v\n", string(body))
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal %s", string(body))
 	}
 	rates, ok := jsonObj["rates"].(map[string]interface{})
 	if !ok {
-		log.Printf("no rates: %v\n", string(body))
-		return nil, err
+		return nil, fmt.Errorf("no rates: %s", string(body))
 	}
 	prices := make(map[string]internal_types.PriceBySymbol)
-	now := time.Now()
+	now := uint64(time.Now().UnixMilli())
 	quote := "USD"
-	for k, v := range rates {
-		// log.Printf("k: %s v: %v\n", k, v.(float64))
-		base := k
+	for base, v := range rates {
 		symbol := fmt.Sprintf("%s/%s", base, quote)
 		price := v.(float64)
 		if price > 0 {
@@ -67,7 +63,7 @@ func (p *FerClient) FetchAndParse(symbols []string, timeout int) (map[string]int
 				Base:      base,
 				Quote:     quote,
 				Price:     1.0 / price,
-				Timestamp: uint64(now.UnixMilli()),
+				Timestamp: now,
 			}
 		}
 	}
