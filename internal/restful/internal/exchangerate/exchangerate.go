@@ -1,4 +1,4 @@
-package frankfurter
+package exchangerate
 
 import (
 	"encoding/json"
@@ -13,23 +13,23 @@ import (
 )
 
 const (
-	exchange = "frankfuter"
-	baseUrl  = "https://api.frankfurter.APP/latest"
+	exchange = "exchangerate"
+	baseUrl  = "https://api.exchangerate.host/latest"
 )
 
-type FiatClient struct{}
+type ExchangeRateClient struct{}
 
-func NewFiatClient() *FiatClient {
-	return &FiatClient{}
+func NewExchangeRateClient() *ExchangeRateClient {
+	return &ExchangeRateClient{}
 }
 
-func (p *FiatClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
+func (p *ExchangeRateClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
 	var queryCurrencies []string
 	for _, symbol := range symbols {
 		items := strings.Split(symbol, "/")
 		queryCurrencies = append(queryCurrencies, items[0])
 	}
-	url := fmt.Sprintf("%s?from=USD&to=%s", baseUrl, strings.Join(queryCurrencies, ","))
+	url := fmt.Sprintf("%s?base=USD&symbols=%s", baseUrl, strings.Join(queryCurrencies, ","))
 	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
 	fmt.Printf("url: %s\n", url)
 	resp, err := client.Get(url)

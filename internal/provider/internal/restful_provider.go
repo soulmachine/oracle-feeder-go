@@ -4,29 +4,29 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/terra-money/oracle-feeder-go/internal/fiat"
+	"github.com/terra-money/oracle-feeder-go/internal/restful"
 	internal_types "github.com/terra-money/oracle-feeder-go/internal/types"
 	"github.com/terra-money/oracle-feeder-go/pkg/types"
 	"golang.org/x/exp/maps"
 )
 
-type FiatProvider struct {
+type RESTfulProvider struct {
 	priceBySymbol map[string]internal_types.PriceBySymbol
 }
 
-func NewFiatProvider(exchange string, symbols []string, interval int, timeout int, stopCh <-chan struct{}) (*FiatProvider, error) {
-	fiatClient, err := fiat.GetFiatClient(exchange, symbols)
+func NewRESTfulProvider(exchange string, symbols []string, interval int, timeout int, stopCh <-chan struct{}) (*RESTfulProvider, error) {
+	client, err := restful.NewRESTfulClient(exchange, symbols)
 	if err != nil {
 		return nil, err
 	}
 
-	provider := &FiatProvider{
+	provider := &RESTfulProvider{
 		priceBySymbol: make(map[string]internal_types.PriceBySymbol),
 	}
 
 	go func() {
 		ticker := time.NewTicker(time.Duration(interval) * time.Second)
-		prices, err := fiatClient.FetchAndParse(symbols, timeout)
+		prices, err := client.FetchAndParse(symbols, timeout)
 		if err != nil {
 			return
 		}
@@ -37,7 +37,7 @@ func NewFiatProvider(exchange string, symbols []string, interval int, timeout in
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				prices, err := fiatClient.FetchAndParse(symbols, timeout)
+				prices, err := client.FetchAndParse(symbols, timeout)
 				if err == nil {
 					maps.Copy(provider.priceBySymbol, prices)
 				}
@@ -48,7 +48,7 @@ func NewFiatProvider(exchange string, symbols []string, interval int, timeout in
 	return provider, nil
 }
 
-func (p *FiatProvider) GetPrices() map[string]types.PriceByPair {
+func (p *RESTfulProvider) GetPrices() map[string]types.PriceByPair {
 	result := make(map[string]types.PriceByPair)
 	for _, price := range p.priceBySymbol {
 		pair := fmt.Sprintf("%s/%s", price.Base, price.Quote)

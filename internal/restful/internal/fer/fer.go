@@ -1,4 +1,4 @@
-package exchangerate
+package fer
 
 import (
 	"encoding/json"
@@ -13,23 +13,23 @@ import (
 )
 
 const (
-	exchange = "exchangerate"
-	baseUrl  = "https://api.exchangerate.host/latest"
+	exchange = "fer"
+	baseUrl  = "https://api.fer.ee/latest"
 )
 
-type FiatClient struct{}
+type FerClient struct{}
 
-func NewFiatClient() *FiatClient {
-	return &FiatClient{}
+func NewFerClient() *FerClient {
+	return &FerClient{}
 }
 
-func (p *FiatClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
+func (p *FerClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
 	var queryCurrencies []string
 	for _, symbol := range symbols {
 		items := strings.Split(symbol, "/")
 		queryCurrencies = append(queryCurrencies, items[0])
 	}
-	url := fmt.Sprintf("%s?base=USD&symbols=%s", baseUrl, strings.Join(queryCurrencies, ","))
+	url := fmt.Sprintf("%s?base=USD&to=%s", baseUrl, strings.Join(queryCurrencies, ","))
 	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
 	fmt.Printf("url: %s\n", url)
 	resp, err := client.Get(url)
@@ -58,7 +58,7 @@ func (p *FiatClient) FetchAndParse(symbols []string, timeout int) (map[string]in
 	for k, v := range rates {
 		// log.Printf("k: %s v: %v\n", k, v.(float64))
 		base := k
-		symbol := fmt.Sprintf("%s/USD", base)
+		symbol := fmt.Sprintf("%s/%s", base, quote)
 		price := v.(float64)
 		if price > 0 {
 			prices[symbol] = internal_types.PriceBySymbol{
