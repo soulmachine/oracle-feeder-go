@@ -29,6 +29,8 @@ func SubscribeCandlestick(exchange string, symbols []string, stopCh <-chan struc
 	switch strings.ToLower(exchange) {
 	case "binance":
 		client = binance.NewWebsocketClient()
+	case "coinbase":
+		client = coinbase.NewWebsocketClient()
 	case "huobi":
 		client = huobi.NewWebsocketClient()
 	case "kucoin":
@@ -39,8 +41,6 @@ func SubscribeCandlestick(exchange string, symbols []string, stopCh <-chan struc
 		client = kraken.NewWebsocketClient()
 	case "okx":
 		client = okx.NewWebsocketClient()
-	case "coinbase":
-		client = coinbase.NewWebsocketClient()
 	default:
 		return nil, fmt.Errorf("unknown websocket exchange %s", exchange)
 	}

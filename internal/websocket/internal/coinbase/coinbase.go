@@ -58,7 +58,7 @@ func (wc *WebsocketClient) ConnectAndSubscribe(symbols []string) (*websocket.Con
 		return nil, err
 	}
 
-	command, err := generateCommand(symbols)
+	command := generateCommand(symbols)
 	if err := conn.WriteJSON(&command); err != nil {
 		return nil, err
 	}
@@ -91,12 +91,11 @@ func (wc *WebsocketClient) HandleMsg(msg []byte, conn *websocket.Conn) (*types.C
 
 // generateCommand generates the trade subscription command from specified symbols.
 //
-// API doc: https://docs.cloud.coinbase.com/exchange/docs/websocket-channels
+// API doc: https://docs.cloud.coinbase.com/exchange/docs/websocket-channels#matches-channel
 //
 // For example:
 // {"type":"subscribe","channels": [{"name":"matches","product_ids":["BTC-USD","ETH-USD"]}]}
-// No candlestick channels, use trade channels.
-func generateCommand(symbols []string) (map[string]interface{}, error) {
+func generateCommand(symbols []string) map[string]interface{} {
 	channel := map[string]interface{}{
 		"name":        "matches",
 		"product_ids": symbols,
@@ -106,7 +105,7 @@ func generateCommand(symbols []string) (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"type":     "subscribe",
 		"channels": channels,
-	}, nil
+	}
 }
 
 func parseTradeMsg(rawMsg []byte) (*types.CandlestickMsg, error) {
