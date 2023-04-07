@@ -84,7 +84,11 @@ func (wc *WebsocketClient) HandleMsg(msg []byte, conn *websocket.Conn) (*types.C
 	}
 
 	if typ == "match" || typ == "last_match" {
-		return parseTradeMsg(msg)
+		tradeMsg, err := parseTradeMsg(msg)
+		if err != nil {
+			return nil, err
+		}
+		return generateCandleStickMsg(tradeMsg)
 	}
 	return nil, fmt.Errorf("invalid msg: %s", string(msg))
 }
@@ -108,7 +112,7 @@ func generateCommand(symbols []string) map[string]interface{} {
 	}
 }
 
-func parseTradeMsg(rawMsg []byte) (*types.CandlestickMsg, error) {
+func parseTradeMsg(rawMsg []byte) (*TradeMsg, error) {
 	var msg RawTradeMsg
 	json.Unmarshal(rawMsg, &msg)
 	base, quote, err := parser.ParseSymbol(exchangeName, msg.ProductId)
@@ -137,7 +141,11 @@ func parseTradeMsg(rawMsg []byte) (*types.CandlestickMsg, error) {
 		Volume:    volume,
 		Timestamp: timestamp,
 	}
-	tradeBarTime := timestamp/INTERVAL*INTERVAL + INTERVAL
+	return tradeMsg, nil
+}
+
+func generateCandleStickMsg(tradeMsg *TradeMsg) (*types.CandlestickMsg, error) {
+	tradeBarTime := tradeMsg.Timestamp/INTERVAL*INTERVAL + INTERVAL
 	lastBarTime := symbolToBarTime[tradeMsg.Symbol]
 	if tradeBarTime > lastBarTime {
 		symbolToBarTime[tradeMsg.Symbol] = tradeBarTime
