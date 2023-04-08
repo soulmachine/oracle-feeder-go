@@ -88,7 +88,7 @@ func (wc *WebsocketClient) HandleMsg(msg []byte, conn *websocket.Conn) (*types.C
 		if err != nil {
 			return nil, err
 		}
-		return generateCandleStickMsg(tradeMsg)
+		return generateCandleStickMsg(tradeMsg), nil
 	}
 	return nil, fmt.Errorf("invalid msg: %s", string(msg))
 }
@@ -144,21 +144,17 @@ func parseTradeMsg(rawMsg []byte) (*TradeMsg, error) {
 	return tradeMsg, nil
 }
 
-func generateCandleStickMsg(tradeMsg *TradeMsg) (*types.CandlestickMsg, error) {
-	tradeBarTime := tradeMsg.Timestamp/INTERVAL*INTERVAL + INTERVAL
+func generateCandleStickMsg(tradeMsg *TradeMsg) *types.CandlestickMsg {
+	var candle *types.CandlestickMsg
 	lastBarTime := symbolToBarTime[tradeMsg.Symbol]
-	if tradeBarTime > lastBarTime {
-		symbolToBarTime[tradeMsg.Symbol] = tradeBarTime
-		finalizedCandle := symbolToCandle[tradeMsg.Symbol]
-		// if finalizedCandle != nil && (finalizedCandle.Symbol == "ETH-USD" || finalizedCandle.Symbol == "BTC-USD") {
-		// 	log.Printf("candle: %v\n", finalizedCandle)
-		// }
+	nextBarTime := lastBarTime + INTERVAL
+	if tradeMsg.Timestamp >= nextBarTime {
+		symbolToBarTime[tradeMsg.Symbol] = nextBarTime
+		candle = symbolToCandle[tradeMsg.Symbol]
 		symbolToCandle[tradeMsg.Symbol] = nil
-		addTrade(tradeMsg)
-		return finalizedCandle, nil
 	}
 	addTrade(tradeMsg)
-	return nil, nil
+	return candle
 }
 
 func addTrade(trade *TradeMsg) error {
