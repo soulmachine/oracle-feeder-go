@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/terra-money/oracle-feeder-go/internal/restful/internal/bitstamp"
+	"github.com/terra-money/oracle-feeder-go/internal/restful/internal/bittrex"
 	"github.com/terra-money/oracle-feeder-go/internal/restful/internal/coingecko"
 	"github.com/terra-money/oracle-feeder-go/internal/restful/internal/exchangerate"
 	"github.com/terra-money/oracle-feeder-go/internal/restful/internal/fer"
@@ -23,6 +24,8 @@ func NewRESTfulClient(exchange string, symbols []string) (restfulClient, error) 
 		client = coingecko.NewCoingeckoClient()
 	case "bitstamp":
 		client = bitstamp.NewBitstampClient()
+	case "bittrex":
+		client = bittrex.NewBittrexClient()
 	case "exchangerate":
 		client = exchangerate.NewExchangeRateClient()
 	case "fer":
