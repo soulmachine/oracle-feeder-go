@@ -30,7 +30,7 @@ func NewRESTfulProvider(exchange string, symbols []string, interval int, timeout
 
 	go func() {
 		ticker := time.NewTicker(time.Duration(interval) * time.Second)
-		prices, err := client.FetchAndParse(symbols, timeout)
+		prices, err := client.FetchAndParse(symbols, timeout, &mu)
 		if err == nil {
 			mu.Lock()
 			maps.Copy(provider.priceBySymbol, prices)
@@ -42,7 +42,7 @@ func NewRESTfulProvider(exchange string, symbols []string, interval int, timeout
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				prices, err := client.FetchAndParse(symbols, timeout)
+				prices, err := client.FetchAndParse(symbols, timeout, &mu)
 				if err == nil {
 					mu.Lock()
 					maps.Copy(provider.priceBySymbol, prices)

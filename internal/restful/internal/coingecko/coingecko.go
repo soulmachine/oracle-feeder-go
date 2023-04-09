@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/terra-money/oracle-feeder-go/internal/parser"
@@ -24,7 +25,7 @@ func NewCoingeckoClient() *CoingeckoClient {
 	return &CoingeckoClient{}
 }
 
-func (p *CoingeckoClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
+func (p *CoingeckoClient) FetchAndParse(symbols []string, timeout int, mu *sync.Mutex) (map[string]internal_types.PriceBySymbol, error) {
 	msg, err := fetchPrices(symbols, timeout)
 	if err != nil {
 		return nil, err

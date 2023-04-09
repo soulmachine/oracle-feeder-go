@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	internal_types "github.com/terra-money/oracle-feeder-go/internal/types"
@@ -23,7 +24,7 @@ func NewExchangeRateClient() *ExchangeRateClient {
 	return &ExchangeRateClient{}
 }
 
-func (p *ExchangeRateClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
+func (p *ExchangeRateClient) FetchAndParse(symbols []string, timeout int, mu *sync.Mutex) (map[string]internal_types.PriceBySymbol, error) {
 	var baseCurrencies []string
 	for _, symbol := range symbols {
 		items := strings.Split(symbol, "/")

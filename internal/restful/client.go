@@ -3,6 +3,7 @@ package restful
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/terra-money/oracle-feeder-go/internal/restful/internal/bitstamp"
 	"github.com/terra-money/oracle-feeder-go/internal/restful/internal/coingecko"
@@ -13,7 +14,7 @@ import (
 )
 
 type restfulClient interface {
-	FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error)
+	FetchAndParse(symbols []string, timeout int, mu *sync.Mutex) (map[string]internal_types.PriceBySymbol, error)
 }
 
 func NewRESTfulClient(exchange string, symbols []string) (restfulClient, error) {

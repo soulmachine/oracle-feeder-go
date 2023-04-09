@@ -26,7 +26,7 @@ func NewBitstampClient() *BitstampClient {
 	return &BitstampClient{}
 }
 
-func (p *BitstampClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
+func (p *BitstampClient) FetchAndParse(symbols []string, timeout int, mu *sync.Mutex) (map[string]internal_types.PriceBySymbol, error) {
 	prices := make(map[string]internal_types.PriceBySymbol)
 
 	symbolCh := make(chan string)
@@ -40,7 +40,9 @@ func (p *BitstampClient) FetchAndParse(symbols []string, timeout int) (map[strin
 	priceCh := make(chan *internal_types.PriceBySymbol)
 	go func() {
 		for price := range priceCh {
+			mu.Lock()
 			prices[price.Symbol] = *price
+			mu.Unlock()
 		}
 	}()
 
@@ -84,7 +86,7 @@ type OHLCVResponse struct {
 // API doc: https://www.bitstamp.net/api/#ohlc_data
 func fetchSymbol(symbol string, timeout int) (*internal_types.PriceBySymbol, error) {
 	url := fmt.Sprintf("%s/%s/?step=60&limit=1", baseUrl, symbol)
-	log.Println(url)
+	// log.Println(url)
 	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
 	base, quote, err := parser.ParseSymbol(exchange, symbol)
 	if err != nil {
