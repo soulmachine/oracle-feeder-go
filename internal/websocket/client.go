@@ -10,6 +10,7 @@ import (
 	"github.com/terra-money/oracle-feeder-go/internal/types"
 	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/binance"
 	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/bitfinex"
+	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/bybit"
 	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/coinbase"
 	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/huobi"
 	"github.com/terra-money/oracle-feeder-go/internal/websocket/internal/kraken"
@@ -41,6 +42,8 @@ func SubscribeCandlestick(exchange string, symbols []string, stopCh <-chan struc
 		client = kraken.NewWebsocketClient()
 	case "okx":
 		client = okx.NewWebsocketClient()
+	case "bybit":
+		client = bybit.NewWebsocketClient()
 	default:
 		return nil, fmt.Errorf("unknown websocket exchange %s", exchange)
 	}

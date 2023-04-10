@@ -7,6 +7,7 @@ import (
 	"github.com/terra-money/oracle-feeder-go/internal/parser/internal/binance"
 	"github.com/terra-money/oracle-feeder-go/internal/parser/internal/bitfinex"
 	"github.com/terra-money/oracle-feeder-go/internal/parser/internal/bitstamp"
+	"github.com/terra-money/oracle-feeder-go/internal/parser/internal/bybit"
 	"github.com/terra-money/oracle-feeder-go/internal/parser/internal/coingecko"
 	"github.com/terra-money/oracle-feeder-go/internal/parser/internal/huobi"
 	"github.com/terra-money/oracle-feeder-go/internal/parser/internal/kraken"
@@ -34,6 +35,8 @@ func ParseSymbol(exhcange string, symbol string) (string, string, error) {
 		return kraken.ParseSymbol(symbol)
 	case "bitstamp":
 		return bitstamp.ParseSymbol(symbol)
+	case "bybit":
+		return bybit.ParseSymbol(symbol)
 	default:
 		return parseSymbolDefault(symbol)
 	}
