@@ -26,8 +26,9 @@ func NewBitstampClient() *BitstampClient {
 	return &BitstampClient{}
 }
 
-func (p *BitstampClient) FetchAndParse(symbols []string, timeout int, mu *sync.Mutex) (map[string]internal_types.PriceBySymbol, error) {
+func (p *BitstampClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
 	prices := make(map[string]internal_types.PriceBySymbol)
+	mu := sync.Mutex{}
 
 	symbolCh := make(chan string)
 	go func() {
@@ -37,20 +38,11 @@ func (p *BitstampClient) FetchAndParse(symbols []string, timeout int, mu *sync.M
 		close(symbolCh)
 	}()
 
-	priceCh := make(chan *internal_types.PriceBySymbol)
-	go func() {
-		for price := range priceCh {
-			mu.Lock()
-			prices[price.Symbol] = *price
-			mu.Unlock()
-		}
-	}()
-
 	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
-			httpWorker(timeout, symbolCh, priceCh)
+			httpWorker(timeout, symbolCh, &mu, prices)
 			wg.Done()
 		}()
 	}
@@ -58,13 +50,15 @@ func (p *BitstampClient) FetchAndParse(symbols []string, timeout int, mu *sync.M
 	return prices, nil
 }
 
-func httpWorker(timeout int, symbolCh <-chan string, outCh chan<- *internal_types.PriceBySymbol) {
+func httpWorker(timeout int, symbolCh <-chan string, mu *sync.Mutex, prices map[string]internal_types.PriceBySymbol) {
 	for symbol := range symbolCh {
 		price, err := fetchSymbol(symbol, timeout)
 		if err != nil {
 			log.Printf("fetchSymbol(%s) failed: %v", symbol, err)
 		}
-		outCh <- price
+		mu.Lock()
+		prices[price.Symbol] = *price
+		mu.Unlock()
 	}
 }
 
