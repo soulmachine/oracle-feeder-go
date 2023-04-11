@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	// API doc: https://bybit-exchange.github.io/docs/v5/ws/connect
 	websocketUrl string = "wss://stream.bybit.com/v5/public/spot"
 	exchangeName string = "bybit"
 )
@@ -70,25 +71,23 @@ func (wc *WebsocketClient) HandleMsg(msg []byte, conn *websocket.Conn) (*types.C
 		}
 	}
 
-	_, ok := resp["topic"].(string)
-	if ok {
-		candleMsg, err := parseCandlestickMsg(msg)
-		// if candleMsg != nil {
-		// 	log.Printf("candle: %v\n", candleMsg)
-		// }
-		return candleMsg, err
+	if _, topicExists := resp["topic"].(string); !topicExists {
+		return nil, fmt.Errorf("no topic in %s", string(msg))
 	}
-	log.Printf("unrecognized msg: %v\n", string(msg))
-	return nil, nil
+	if _, dataExists := resp["data"].([]interface{}); !dataExists {
+		return nil, fmt.Errorf("no data in %s", string(msg))
+	}
+
+	return parseCandlestickMsg(msg)
 }
 
 // generateCommand generates the candlestick subscription command from specified symbols.
 //
-// API doc: https://bybit-exchange.github.io/docs/v5/ws/connect
+// API doc: https://bybit-exchange.github.io/docs/v5/websocket/public/kline
 //
 // For example:
 // {"req_id": "terra-price-server","op":"subscribe","args":["kline.1.BTCUSDT", "kline.1.ETHUSDT"]}
-func generateCommand(symbols []string) (map[string]interface{}, error) {
+func generateCommand(symbols []string) map[string]interface{} {
 	var args []string
 	for _, symbol := range symbols {
 		arg := fmt.Sprintf("kline.1.%s", symbol)
@@ -98,11 +97,11 @@ func generateCommand(symbols []string) (map[string]interface{}, error) {
 		"req_id": "terra-price-server",
 		"op":     "subscribe",
 		"args":   args,
-	}, nil
+	}
 }
 
-// API doc: https://bybit-exchange.github.io/docs/v5/ws/connect
-// Spot can input up to 10 args for each subscription request sent to one connection
+// Spot can input up to 10 args for each subscription request sent to one connection,
+// see https://bybit-exchange.github.io/docs/v5/ws/connect#public-channel---args-limits
 func generateCommands(symbols []string) []map[string]interface{} {
 	var commands []map[string]interface{}
 	groupSize := 10
@@ -113,10 +112,7 @@ func generateCommands(symbols []string) []map[string]interface{} {
 			j = n
 		}
 		group := symbols[i:j]
-		command, err := generateCommand(group)
-		if err == nil {
-			commands = append(commands, command)
-		}
+		commands = append(commands, generateCommand(group))
 	}
 	return commands
 }
@@ -141,9 +137,10 @@ func parseCandlestickMsg(rawMsg []byte) (*types.CandlestickMsg, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid candlestick %s", string(rawMsg))
 	}
+
 	data := resp["data"].([]interface{})
 	if len(data) != 1 {
-		return nil, fmt.Errorf("no data %s", string(rawMsg))
+		return nil, fmt.Errorf("invalid data %s", string(rawMsg))
 	}
 
 	topic := resp["topic"].(string)
@@ -162,6 +159,7 @@ func parseCandlestickMsg(rawMsg []byte) (*types.CandlestickMsg, error) {
 
 	confirm := candles["confirm"].(bool)
 	if !confirm {
+		// this candle is not closed yet
 		return nil, nil
 	}
 
