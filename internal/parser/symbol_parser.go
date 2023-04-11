@@ -23,20 +23,20 @@ func ParseSymbol(exhcange string, symbol string) (string, string, error) {
 	switch strings.ToLower(exhcange) {
 	case "binance":
 		return binance.ParseSymbol(symbol)
-	case "coingecko":
-		return coingecko.ParseSymbol(symbol)
-	case "huobi":
-		return huobi.ParseSymbol(symbol)
-	case "kucoin":
-		return kucoin.ParseSymbol(symbol)
 	case "bitfinex":
 		return bitfinex.ParseSymbol(symbol)
-	case "kraken":
-		return kraken.ParseSymbol(symbol)
 	case "bitstamp":
 		return bitstamp.ParseSymbol(symbol)
 	case "bybit":
 		return bybit.ParseSymbol(symbol)
+	case "coingecko":
+		return coingecko.ParseSymbol(symbol)
+	case "huobi":
+		return huobi.ParseSymbol(symbol)
+	case "kraken":
+		return kraken.ParseSymbol(symbol)
+	case "kucoin":
+		return kucoin.ParseSymbol(symbol)
 	default:
 		return parseSymbolDefault(symbol)
 	}
