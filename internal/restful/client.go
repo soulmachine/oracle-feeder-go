@@ -20,10 +20,10 @@ type restfulClient interface {
 func NewRESTfulClient(exchange string, symbols []string) (restfulClient, error) {
 	var client restfulClient
 	switch strings.ToLower(exchange) {
-	case "bittrex":
-		client = bittrex.NewBittrexClient()
 	case "bitstamp":
 		client = bitstamp.NewBitstampClient()
+	case "bittrex":
+		client = bittrex.NewBittrexClient()
 	case "coingecko":
 		client = coingecko.NewCoingeckoClient()
 	case "exchangerate":

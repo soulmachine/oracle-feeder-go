@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	exchange   = "bittrex"
+	exchange = "bittrex"
+	// API doc: https://bittrex.github.io/api/v3
 	baseUrl    = "https://api.bittrex.com/v3"
 	numWorkers = 16
 )
@@ -26,7 +27,6 @@ func NewBittrexClient() *BittrexClient {
 	return &BittrexClient{}
 }
 
-// Doc: https://bittrex.github.io/api/v3
 // Candle api only support single currency pair, need fetch one by one.
 func (p *BittrexClient) FetchAndParse(symbols []string, timeout int) (map[string]internal_types.PriceBySymbol, error) {
 	prices := make(map[string]internal_types.PriceBySymbol)
@@ -54,9 +54,9 @@ func (p *BittrexClient) FetchAndParse(symbols []string, timeout int) (map[string
 
 func httpWorker(timeout int, symbolCh <-chan string, mu *sync.Mutex, prices map[string]internal_types.PriceBySymbol) {
 	for symbol := range symbolCh {
-		price, err := fetchSymbol(symbol, timeout)
+		price, err := fetchCandle(symbol, timeout)
 		if err != nil {
-			log.Printf("fetchSymbol(%s) failed: %v", symbol, err)
+			log.Printf("fetchCandle(%s) failed: %v", symbol, err)
 		}
 		mu.Lock()
 		prices[price.Symbol] = *price
@@ -64,10 +64,9 @@ func httpWorker(timeout int, symbolCh <-chan string, mu *sync.Mutex, prices map[
 	}
 }
 
-func fetchSymbol(symbol string, timeout int) (*internal_types.PriceBySymbol, error) {
-	now := time.Now()
+// API doc https://bittrex.github.io/api/v3#operation--markets--marketSymbol--candles--candleType---candleInterval--recent-get
+func fetchCandle(symbol string, timeout int) (*internal_types.PriceBySymbol, error) {
 	url := fmt.Sprintf("%s/markets/%s/candles/trade/MINUTE_1/recent", baseUrl, symbol)
-	// log.Printf("url: %s\n", url)
 	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
 	base, quote, err := parser.ParseSymbol(exchange, symbol)
 	if err != nil {
@@ -84,9 +83,13 @@ func fetchSymbol(symbol string, timeout int) (*internal_types.PriceBySymbol, err
 	}
 	var jsonObj []interface{}
 	err = json.Unmarshal(body, &jsonObj)
-	if err != nil || len(jsonObj) == 0 {
+	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal %s", string(body))
 	}
+	if len(jsonObj) == 0 {
+		return nil, fmt.Errorf("empty array %s", string(body))
+	}
+
 	candle, ok := jsonObj[len(jsonObj)-1].(map[string]interface{})
 	if !ok {
 		return nil, fmt.Errorf("no data: %s", string(body))
@@ -99,23 +102,17 @@ func fetchSymbol(symbol string, timeout int) (*internal_types.PriceBySymbol, err
 	if err != nil {
 		return nil, err
 	}
-	// high, err := strconv.ParseFloat(candle["high"].(string), 64)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// low, err := strconv.ParseFloat(candle["low"].(string), 64)
-	// if err != nil {
-	// 	return nil, err
-	// }
+
+	startsAt, err := time.Parse(time.RFC3339, candle["startsAt"].(string))
+	if err != nil {
+		return nil, err
+	}
+	endsAt := startsAt.Add(time.Minute)
+
 	baseVolume, err := strconv.ParseFloat(candle["volume"].(string), 64)
 	if err != nil {
 		return nil, err
 	}
-	// timeObj, err := time.Parse(time.RFC3339, candle["startsAt"].(string))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	timestamp := uint64(now.UnixMilli())
 	quoteVolume, err := strconv.ParseFloat(candle["quoteVolume"].(string), 64)
 	if err != nil {
 		return nil, err
@@ -126,13 +123,13 @@ func fetchSymbol(symbol string, timeout int) (*internal_types.PriceBySymbol, err
 	} else {
 		vwap = quoteVolume / baseVolume
 	}
-	price := &internal_types.PriceBySymbol{
+
+	return &internal_types.PriceBySymbol{
 		Exchange:  exchange,
 		Symbol:    symbol,
 		Base:      base,
 		Quote:     quote,
 		Price:     vwap,
-		Timestamp: timestamp,
-	}
-	return price, nil
+		Timestamp: uint64(endsAt.UnixMilli()),
+	}, nil
 }
